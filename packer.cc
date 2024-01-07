@@ -63,7 +63,7 @@ public:
     // static funcs
     // static ContourMsg GetContourMsgFromData(std::vector<uint8_t> const&
     // data);
-    static Contour GetContourFromData(std::vector<uint8_t> const& data);
+    static bool GetContourFromData(std::vector<uint8_t> const& data, Contour& res);
 
 private:
     static bool GetPointFromData(std::vector<uint8_t> const& data, std::size_t& offset,
@@ -100,6 +100,8 @@ static std::size_t xcopy_n(T& dst, std::vector<uint8_t> const& data, std::ptrdif
     return pos + sizeof(T);
 }
 
+#define XCOPY(dst, d, p) (p) = xcopy_n(dst, (d), (p))
+
 #define CHECK_POS(p, str)                                        \
     do {                                                         \
         if ((p) == g_npos) {                                     \
@@ -112,7 +114,7 @@ static std::size_t xcopy_n(T& dst, std::vector<uint8_t> const& data, std::ptrdif
 #define CHECK_POS_VALID(p, v, g)                          \
     do {                                                  \
         CHECK_POS((p), (v));                              \
-        if ((v) >= (g)) {                                 \
+        if ((v) >= static_cast<uint32_t>(g)) {            \
             std::cout << "get " << #v << " is invalid\n"; \
             return false;                                 \
         }                                                 \
@@ -126,10 +128,10 @@ bool ContourMsg::GetPointFromData(const std::vector<uint8_t>& data, std::size_t&
     point_type type{0U};
     auto       pos{xcopy_n(x, data, offset)};
     CHECK_POS(pos, x);
-    pos = xcopy_n(y, data, pos);
+    XCOPY(y, data, pos);
     CHECK_POS(pos, y);
     if (static_cast<rev_flag_type>(ContourRevFlag::f3) >= flag) {
-        pos = xcopy_n(type, data, pos);
+        XCOPY(type, data, pos);
         CHECK_POS(pos, type);
     }
     offset = pos;  // keep pos
@@ -151,21 +153,21 @@ bool ContourMsg::GetImgPtsInfoFromData(std::vector<uint8_t> const& data,
                                        img_pts_infos_type& res)
 {
     label_type   label{0U};
-    uint32_t     pts_img_num;
-    uint32_t     pts_above_vp_num;
-    uint32_t     pts_vr_num;
+    uint32_t     pts_img_num{0U};
+    uint32_t     pts_above_vp_num{0U};
+    uint32_t     pts_vr_num{0U};
     img_pts_type pts_out_img;
     img_pts_type pts_above_vp;
     auto         pos{xcopy_n(label, data, offset)};
     CHECK_POS(pos, label);
     if (flag > 0U) {
-        pos = xcopy_n(pts_img_num, data, pos);
+        XCOPY(pts_img_num, data, pos);
         CHECK_POS(pos, pts_img_num);
-        pos = xcopy_n(pts_above_vp_num, data, pos);
+        XCOPY(pts_above_vp_num, data, pos);
         CHECK_POS(pos, pts_above_vp_num);
     }
     if (flag == static_cast<rev_flag_type>(ContourRevFlag::f2)) {
-        pos = xcopy_n(pts_vr_num, data, pos);
+        XCOPY(pts_vr_num, data, pos);
         CHECK_POS(pos, pts_vr_num);
     }
     GET_POINTS(pts_img_num, data, pos, flag, pts_out_img);
@@ -176,6 +178,33 @@ bool ContourMsg::GetImgPtsInfoFromData(std::vector<uint8_t> const& data,
     }
     offset = pos;
     res.emplace_back(label, std::move(pts_out_img), std::move(pts_above_vp));
+    return true;
+}
+
+bool ContourMsg::GetContourFromData(std::vector<uint8_t> const& data, Contour& res)
+{
+    if (data.empty()) {
+        return false;
+    }
+    camera_id_type     cid{0U};
+    auto               pos{xcopy_n(cid, data, 0)};
+    rev_flag_type      flag{0U};
+    uint32_t           contour_extend_num{0U};
+    img_pts_infos_type infos;
+
+    CHECK_POS_VALID(pos, cid, ContourLimit::camera_id_max);
+    XCOPY(flag, data, pos);
+    CHECK_POS_VALID(pos, flag, ContourLimit::rev_flag_max);
+    XCOPY(contour_extend_num, data, pos);
+    CHECK_POS_VALID(pos, contour_extend_num, ContourLimit::contour_extend_num_max);
+    for (uint32_t i = 0; i < contour_extend_num; i++) {
+        if (!GetImgPtsInfoFromData(data, pos, flag, infos)) {
+            return false;
+        }
+    }
+    res.camera_id_     = cid;
+    res.rev_flag_      = flag;
+    res.img_pts_infos_ = std::move(infos);
     return true;
 }
 
