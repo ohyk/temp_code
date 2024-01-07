@@ -1,6 +1,3 @@
-#include <stdint.h>
-
-#include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstring>
@@ -11,10 +8,12 @@ class ContourMsg
 {
 public:
     // types
-    using point_type     = uint64_t;
-    using label_type     = uint32_t;
-    using camera_id_type = uint32_t;
-    using rev_flag_type  = uint32_t;
+    using point_type              = uint64_t;
+    using label_type              = uint32_t;
+    using camera_id_type          = uint32_t;
+    using rev_flag_type           = uint32_t;
+    using contour_extend_num_type = uint32_t;
+    using pts_num_type            = uint32_t;
 
 #pragma pack(push, 1)
     struct Point
@@ -153,9 +152,9 @@ bool ContourMsg::GetImgPtsInfoFromData(std::vector<uint8_t> const& data,
                                        img_pts_infos_type& res)
 {
     label_type   label{0U};
-    uint32_t     pts_img_num{0U};
-    uint32_t     pts_above_vp_num{0U};
-    uint32_t     pts_vr_num{0U};
+    pts_num_type pts_img_num{0U};
+    pts_num_type pts_above_vp_num{0U};
+    pts_num_type pts_vr_num{0U};
     img_pts_type pts_out_img;
     img_pts_type pts_above_vp;
     auto         pos{xcopy_n(label, data, offset)};
@@ -186,18 +185,18 @@ bool ContourMsg::GetContourFromData(std::vector<uint8_t> const& data, Contour& r
     if (data.empty()) {
         return false;
     }
-    camera_id_type     cid{0U};
-    auto               pos{xcopy_n(cid, data, 0)};
-    rev_flag_type      flag{0U};
-    uint32_t           contour_extend_num{0U};
-    img_pts_infos_type infos;
+    camera_id_type          cid{0U};
+    rev_flag_type           flag{0U};
+    contour_extend_num_type contour_extend_num{0U};
+    img_pts_infos_type      infos;
+    auto                    pos{xcopy_n(cid, data, 0)};
 
     CHECK_POS_VALID(pos, cid, ContourLimit::camera_id_max);
     XCOPY(flag, data, pos);
     CHECK_POS_VALID(pos, flag, ContourLimit::rev_flag_max);
     XCOPY(contour_extend_num, data, pos);
     CHECK_POS_VALID(pos, contour_extend_num, ContourLimit::contour_extend_num_max);
-    for (uint32_t i = 0; i < contour_extend_num; i++) {
+    for (contour_extend_num_type i = 0U; i < contour_extend_num; i++) {
         if (!GetImgPtsInfoFromData(data, pos, flag, infos)) {
             return false;
         }
